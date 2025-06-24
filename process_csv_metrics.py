@@ -150,13 +150,14 @@ def process_csv_metrics(tracked_csv_path=None, tracked_csv_bytes=None, original_
     metrics_df.fillna(0, inplace=True)
     metrics_df = metrics_df[metrics_df['total_displacement'] >= 20]
 
-    scaler = joblib.load("minmax_scaler.pkl")
-    model = joblib.load("subcluster_model.pkl")
+    scaler = joblib.load("models/minmax_scaler.pkl")
+    model = joblib.load("models/subcluster_model.pkl")
     features = metrics_df[['VCL', 'VAP', 'VSL', 'LIN', 'WOB', 'STR', 'ALH Mean', 'ALH Max']]
     X_scaled = scaler.transform(features)
     metrics_df['Cluster'] = model.predict(X_scaled)
-    cluster_names = {0: "Intermediate Motility", 1: "Hyperactivated Motility", 2: "Progressive Motility"}
-    metrics_df['Motility Class'] = pd.Series(metrics_df['Cluster']).map(cluster_names)
+    cluster_label_map = joblib.load("models/cluster_label_map.pkl")
+    metrics_df['Motility Class'] = metrics_df['Cluster'].map(cluster_label_map)
+
 
     cap = cv2.VideoCapture(original_video_path)
     fps = int(cap.get(cv2.CAP_PROP_FPS))
@@ -176,11 +177,10 @@ def process_csv_metrics(tracked_csv_path=None, tracked_csv_bytes=None, original_
     cmap = plt.get_cmap('rainbow')
     colors = [cmap(i / n_clusters) for i in range(n_clusters)]
     cluster_colors = {cluster_id: tuple(int(255 * x) for x in colors[i][:3][::-1]) for i, cluster_id in enumerate(cluster_ids)}
-    cluster_label_map = {
-        0: "Intermediate Motility",
-        1: "Hyperactivated Motility",
-        2: "Progressive Motility"
-    }
+    cluster_label_map = joblib.load("models/cluster_label_map.pkl")
+    assert set(metrics_df['Cluster'].unique()).issubset(cluster_label_map.keys()), "Cluster ID found with no label mapping"
+
+
     # Map id to cluster
     id_to_cluster = metrics_df.set_index('id')['Cluster'].to_dict()
     # Track history for polylines
