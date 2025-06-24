@@ -6,3 +6,5 @@ matplotlib
 joblib
 ultralytics
 lap>=0.5.12
+pandas
+numpy
