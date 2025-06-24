@@ -11,6 +11,25 @@ from process_csv_metrics import process_csv_metrics
 
 # --- UI Custom Logo and Title ---
 st.title("🧬 Sperm Detection and Motility Classification")
+st.markdown(
+"Analyze sperm movement directly from video—this app detects, tracks, and classifies motility behaviors to support more granular fertility insig"hts."
+)
+with st.expander("ℹ️ About this app"):
+    st.markdown("""
+    This app performs automated sperm detection, tracking, and motility classification from uploaded microscope videos using deep learning and computer vision techniques.
+
+    **Key features:**
+    - **YOLO-based object detection** and **BoT-SORT tracking**
+    - **Kinematic metric calculations**: VCL, VAP, VSL, ALH, LIN, WOB, STR
+    - **Cluster-based motility classification** (e.g., Progressive, Hyperactivated)
+    - **Downloadable Results**
+        - **Annotated Video**: Original video overlaid with bounding boxes and tracking IDs
+        - **Tracking Data CSV**: Frame-by-frame coordinates and confidence scores for each detection
+        - **Classified Video**: Tracks color-coded by motility subtype
+        - **Kinematic Metrics CSV**: Detailed metrics per sperm, with class labels
+
+    Built as part of a research-driven effort to enhance sperm motility assessment through machine learning and quantitative analysis.
+    """)
 
 # --- Session State ---
 if 'processed' not in st.session_state:
@@ -168,15 +187,22 @@ if st.session_state.get('processed', False):
         st.subheader("Motility Classification")
         if st.session_state.get('annotated_video'):
             st.video(st.session_state.annotated_video)
-        st.download_button("Download Motility Classification Video", st.session_state.annotated_video, "motility_classified_video.mp4", mime="video/mp4")
-        st.download_button("Download Kinematic Metrics CSV", st.session_state.metrics_csv, "kinematic_metrics.csv", mime="text/csv") 
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.download_button("Download Motility Classification Video", st.session_state.annotated_video, "motility_classified_video.mp4", mime="video/mp4")
+        with col2:
+            st.download_button("Download Kinematic Metrics CSV", st.session_state.metrics_csv, "kinematic_metrics.csv", mime="text/csv")
 
     with tab2:
         st.subheader("Object Detection & Tracking")
         if st.session_state.video_bytes:
             st.video(st.session_state.video_bytes)
-        st.download_button("Download Annotated Video", st.session_state.video_bytes, "annotated_video.mp4", mime="video/mp4")
-        st.download_button("Download Tracking Data (CSV)", st.session_state.csv_bytes, "tracked_coordinates.csv", mime="text/csv")
+        col1, col2 = st.columns(2)
+        with col1: 
+            st.download_button("Download Annotated Video", st.session_state.video_bytes, "annotated_video.mp4", mime="video/mp4")
+        with col2:
+            st.download_button("Download Tracking Data (CSV)", st.session_state.csv_bytes, "tracked_coordinates.csv", mime="text/csv")
 
     if st.button("Process New Video"):
         for key in [
