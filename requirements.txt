@@ -8,3 +8,4 @@ ultralytics
 lap>=0.5.12
 pandas
 numpy
+scikit-learn
