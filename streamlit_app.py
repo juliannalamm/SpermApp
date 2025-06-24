@@ -89,21 +89,18 @@ def process_video(video_path, model, tracker, progress_bar, max_seconds=10):
 # Streamlit UI
 
 demo_dir = "demo_videos"
-demo_videos = [f for f in os.listdir(demo_dir) if f.endswith(('.mp4', '.avi', '.mov', '.mkv'))]
+demo_videos = [f for f in os.listdir(demo_dir) if f.endswith((".mp4", ".avi", ".mov", ".mkv"))]
 demo_videos.insert(0, "None (upload your own)")
 
 st.title("YOLO Sperm Tracking App")
-uploaded_file = st.file_uploader("Upload a video", type=["mp4", "avi", "mov", "mkv"])
 
-# Demo video selector
-demo_choice = st.selectbox("Or select a demo video:", demo_videos)
+# 1. Demo selector/upload at the top
+st.subheader("Select a demo video or upload your own:")
+demo_choice = st.selectbox("Demo video:", demo_videos)
+uploaded_file = st.file_uploader("Or upload a video", type=["mp4", "avi", "mov", "mkv"])
 
-# File uploader
-
-# Determine which video to use
+# 2. Determine which video to use
 video_path = None
-
-
 if demo_choice != "None (upload your own)":
     video_path = os.path.join(demo_dir, demo_choice)
 elif uploaded_file is not None:
@@ -111,109 +108,108 @@ elif uploaded_file is not None:
     tfile.write(uploaded_file.read())
     video_path = tfile.name
 
-# Show preview if a demo is selected
-start = st.button("Start Processing")  # Add a Start button
+# 3. Metadata input (if needed)
+use_defaults = (demo_choice != "None (upload your own)")
+if not use_defaults:
+    st.subheader("Enter Metadata for Uploaded Video")
+    image_j_scale = st.number_input("Pixels per micron", value=0.48, min_value=0.01)
+    total_duration_seconds = st.number_input("Total video duration (sec)", value=30.0, min_value=0.1)
+    img_w = st.number_input("Image width (px)", value=640)
+    img_h = st.number_input("Image height (px)", value=480)
+else:
+    image_j_scale = 0.48
+    total_duration_seconds = 30
+    img_w = 640
+    img_h = 480
 
-# Show preview if a demo is selected and processing hasn't started
-if demo_choice != "None (upload your own)" and not st.session_state.processed:
-    st.video(video_path)
+# 4. Start Processing button
+start = st.button("Start Processing")
 
-# After processing, always show the last processed video (if available)
-if st.session_state.processed and st.session_state.video_bytes:
-    st.video(st.session_state.video_bytes)
-
-# Only process if Start is pressed and a video is selected
+# 5. Processing logic
 if start and video_path:
     # Load model
-    model = YOLO("train_experiments/031025/run12/weights/best.pt")
-    tracker = "custom_trackers/custom_botsort.yaml"
+    model = YOLO("models/best.pt")
+    tracker = "models/custom_botsort.yaml"
 
     # Create progress bar
     progress_bar = st.progress(0)
 
-    # Process video
-    with st.spinner('Processing video...'):
-        (st.session_state.output_video_path, 
-         st.session_state.csv_output_path, 
-         st.session_state.frames_written,
-         st.session_state.video_bytes,
-         st.session_state.csv_bytes) = process_video(
+    # Process video (object detection/tracking)
+    with st.spinner('Processing: Object Detection and Tracking...'):
+        (output_video_path, 
+         csv_output_path, 
+         frames_written,
+         video_bytes,
+         csv_bytes) = process_video(
             video_path, model, tracker, progress_bar
         )
         st.session_state.processed = True
+        st.session_state.video_bytes = video_bytes
+        st.session_state.csv_bytes = csv_bytes
+        st.session_state.frames_written = frames_written
+
+    # Process motility classification and kinematic metrics
+    with st.spinner("Processing: Motility Classification and Kinematic Metrics..."):
+        annotated_video, metrics_csv = process_csv_metrics(
+            tracked_csv_bytes=st.session_state.csv_bytes,
+            original_video_path=video_path,
+            image_j_scale=image_j_scale,
+            total_duration_seconds=total_duration_seconds,
+            img_w=img_w,
+            img_h=img_h
+        )
+        st.session_state.annotated_video = annotated_video
+        st.session_state.metrics_csv = metrics_csv
 
     st.success(f"Processing complete! {st.session_state.frames_written} frames processed.")
 
-    if st.session_state.video_bytes:
-        st.video(st.session_state.video_bytes)
-    else:
-        st.warning("Video could not be loaded.")
-
-    # Add a button to process a new video
-    if st.session_state.processed:
-        col1, col2 = st.columns(2)
-    
-    col1.download_button(
-        label="Download Annotated Video",
-        data=st.session_state.video_bytes,  
-        file_name="annotated_video.mp4",
-        mime="video/mp4"
-    )
-    col2.download_button(
-        label="Download Tracking Data (CSV)",
-        data=st.session_state.csv_bytes,
-        file_name="tracked_coordinates.csv",
-        mime="text/csv"
-    )
-        
-    if st.button("Process New Video"):
-        st.session_state.processed = False
-        st.rerun()
-        
-
-# -------------------------------
-# Step 2: Optional Classification
-# -------------------------------
-if st.session_state.processed:
+# 6. Results layout: two columns, each with video and download buttons
+if st.session_state.get('processed', False):
     st.markdown("---")
-    st.header("Optional: Classify and Calculate Kinematic Metrics")
+    st.header("Results")
+    col1, col2 = st.columns(2)
 
-    use_defaults = (demo_choice != "None (upload your own)")
-
-    if not use_defaults:
-        st.subheader("Enter Metadata for Uploaded Video")
-        image_j_scale = st.number_input("Pixels per micron", value=0.48, min_value=0.01)
-        total_duration_seconds = st.number_input("Total video duration (sec)", value=30.0, min_value=0.1)
-        img_w = st.number_input("Image width (px)", value=640)
-        img_h = st.number_input("Image height (px)", value=480)
-    else:
-        image_j_scale = 0.48
-        total_duration_seconds = 30
-        img_w = 640
-        img_h = 480
-
-    if st.button("Classify and Calculate Kinematic Metrics"):
-        with st.spinner("Classifying motility and generating annotated video..."):
-            annotated_video, metrics_csv = process_csv_metrics(
-                tracked_csv_bytes=st.session_state.csv_bytes,
-                original_video_path=video_path,
-                image_j_scale=image_j_scale,
-                total_duration_seconds=total_duration_seconds,
-                img_w=img_w,img_h=img_h
-                )
-
-        st.video(annotated_video)
-
-        col1, col2 = st.columns(2)
-        col1.download_button(
-            label="Download Kinematic Metrics CSV",
-            data=metrics_csv,
-            file_name="kinematic_metrics.csv",
+    # Left: Detection/Tracking
+    with col1:
+        st.subheader("Object Detection & Tracking")
+        if st.session_state.video_bytes:
+            st.video(st.session_state.video_bytes)
+        st.download_button(
+            label="Download Annotated Video",
+            data=st.session_state.video_bytes,
+            file_name="annotated_video.mp4",
+            mime="video/mp4"
+        )
+        st.download_button(
+            label="Download Tracking Data (CSV)",
+            data=st.session_state.csv_bytes,
+            file_name="tracked_coordinates.csv",
             mime="text/csv"
         )
-        col2.download_button(
+
+    # Right: Motility Classification
+    with col2:
+        st.subheader("Motility Classification & Kinematic Metrics")
+        if st.session_state.get('annotated_video'):
+            st.video(st.session_state.annotated_video)
+        st.download_button(
             label="Download Motility Classification Video",
-            data=annotated_video,
+            data=st.session_state.annotated_video,
             file_name="motility_classified_video.mp4",
             mime="video/mp4"
         )
+        st.download_button(
+            label="Download Kinematic Metrics CSV",
+            data=st.session_state.metrics_csv,
+            file_name="kinematic_metrics.csv",
+            mime="text/csv"
+        )
+
+    # Option to process a new video
+    if st.button("Process New Video"):
+        for key in [
+            'processed', 'output_video_path', 'csv_output_path', 'frames_written',
+            'video_bytes', 'csv_bytes', 'annotated_video', 'metrics_csv']:
+            if key in st.session_state:
+                del st.session_state[key]
+        st.rerun()
