@@ -12,7 +12,7 @@ from process_csv_metrics import process_csv_metrics
 # --- UI Custom Logo and Title ---
 st.title("🧬 Sperm Detection and Motility Classification")
 st.markdown(
-"Analyze sperm movement directly from video—this app detects, tracks, and classifies motility behaviors to support more granular fertility insig"hts."
+"Analyze sperm movement directly from video—this app detects, tracks, and classifies motility behaviors to support more granular fertility insights."
 )
 with st.expander("ℹ️ About this app"):
     st.markdown("""
