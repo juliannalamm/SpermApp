@@ -9,7 +9,10 @@ import uuid
 import subprocess
 from process_csv_metrics import process_csv_metrics
 
-# Initialize session state for storing results
+# --- UI Custom Logo and Title ---
+st.title("🧬 Sperm Detection and Motility Classification")
+
+# --- Session State ---
 if 'processed' not in st.session_state:
     st.session_state.processed = False
     st.session_state.output_video_path = None
@@ -18,9 +21,8 @@ if 'processed' not in st.session_state:
     st.session_state.video_bytes = None
     st.session_state.csv_bytes = None
 
-def process_video(video_path, model, tracker, progress_bar, max_seconds=10):
-    import subprocess
-
+# --- Video Processing Function ---
+def process_video(video_path, model, tracker, progress_bar, frame_info):
     cap = cv2.VideoCapture(video_path)
     frame_width = int(cap.get(3))
     frame_height = int(cap.get(4))
@@ -59,12 +61,12 @@ def process_video(video_path, model, tracker, progress_bar, max_seconds=10):
         frames_written += 1
         frame_count += 1
         progress_bar.progress(min(frame_count / total_frames, 1.0))
+        frame_info.text(f"Processing frame {frame_count}/{total_frames}")
 
     cap.release()
     out.release()
     csv_file.close()
 
-    # Re-encode to browser-safe format
     fixed_output_temp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
     fixed_output_path = fixed_output_temp.name
     subprocess.run([
@@ -72,34 +74,25 @@ def process_video(video_path, model, tracker, progress_bar, max_seconds=10):
         "-vcodec", "libx264", "-acodec", "aac", fixed_output_path
     ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    # Read to memory
     with open(fixed_output_path, 'rb') as f:
         video_bytes = f.read()
     with open(csv_output_path, 'rb') as f:
         csv_bytes = f.read()
 
-    # Clean up all temp files
     os.remove(output_video_path)
     os.remove(fixed_output_path)
-    # os.remove(csv_output_path)
 
     return None, None, frames_written, video_bytes, csv_bytes
 
-
-# Streamlit UI
-
+# --- Video Selection ---
 demo_dir = "demo_videos"
 demo_videos = [f for f in os.listdir(demo_dir) if f.endswith((".mp4", ".avi", ".mov", ".mkv"))]
 demo_videos.insert(0, "None (upload your own)")
 
-st.title("YOLO Sperm Tracking App")
-
-# 1. Demo selector/upload at the top
 st.subheader("Select a demo video or upload your own:")
 demo_choice = st.selectbox("Demo video:", demo_videos)
 uploaded_file = st.file_uploader("Or upload a video", type=["mp4", "avi", "mov", "mkv"])
 
-# 2. Determine which video to use
 video_path = None
 if demo_choice != "None (upload your own)":
     video_path = os.path.join(demo_dir, demo_choice)
@@ -108,48 +101,50 @@ elif uploaded_file is not None:
     tfile.write(uploaded_file.read())
     video_path = tfile.name
 
-# 3. Metadata input (if needed)
+# --- Advanced Metadata ---
 use_defaults = (demo_choice != "None (upload your own)")
 if not use_defaults:
-    st.subheader("Enter Metadata for Uploaded Video")
-    image_j_scale = st.number_input("Pixels per micron", value=0.48, min_value=0.01)
-    total_duration_seconds = st.number_input("Total video duration (sec)", value=30.0, min_value=0.1)
-    img_w = st.number_input("Image width (px)", value=640)
-    img_h = st.number_input("Image height (px)", value=480)
+    with st.expander("Advanced Settings (custom upload only)"):
+        st.subheader("Enter Metadata for Uploaded Video")
+        image_j_scale = st.number_input(
+            "Pixels per micron", 
+            value=0.48, 
+            min_value=0.01,
+            help="Using ImageJ: 1) Open your video in ImageJ 2) Use the 'Set Scale' tool (Analyze > Set Scale) 3) Draw a line over a known distance (e.g., 100 microns) 4) Enter the known distance and units 5) Use the resulting scale (pixels/unit). Alternative: Measure pixels manually and divide by known distance."
+        )
+        total_duration_seconds = st.number_input("Total video duration (sec)", value=30.0, min_value=0.1)
+        img_w = st.number_input("Image width (px)", value=640)
+        img_h = st.number_input("Image height (px)", value=480)
 else:
     image_j_scale = 0.48
     total_duration_seconds = 30
     img_w = 640
     img_h = 480
 
-# 4. Start Processing button
+# --- Processing Trigger ---
 start = st.button("Start Processing")
 
-# 5. Processing logic
+# --- Video Preview ---
+if video_path and not start:
+    st.subheader("Video Preview")
+    st.video(video_path)
+
 if start and video_path:
-    # Load model
     model = YOLO("models/best.pt")
     tracker = "models/custom_botsort.yaml"
-
-    # Create progress bar
     progress_bar = st.progress(0)
+    frame_info = st.empty()
 
-    # Process video (object detection/tracking)
     with st.spinner('Processing: Object Detection and Tracking...'):
-        (output_video_path, 
-         csv_output_path, 
-         frames_written,
-         video_bytes,
-         csv_bytes) = process_video(
-            video_path, model, tracker, progress_bar
+        (_, _, frames_written, video_bytes, csv_bytes) = process_video(
+            video_path, model, tracker, progress_bar, frame_info
         )
         st.session_state.processed = True
         st.session_state.video_bytes = video_bytes
         st.session_state.csv_bytes = csv_bytes
         st.session_state.frames_written = frames_written
 
-    # Process motility classification and kinematic metrics
-    with st.spinner("Processing: Motility Classification and Kinematic Metrics..."):
+    with st.spinner("Classifying motility, just a few more moments..."):
         annotated_video, metrics_csv = process_csv_metrics(
             tracked_csv_bytes=st.session_state.csv_bytes,
             original_video_path=video_path,
@@ -163,49 +158,26 @@ if start and video_path:
 
     st.success(f"Processing complete! {st.session_state.frames_written} frames processed.")
 
-# 6. Results layout: two columns, each with video and download buttons
+# --- Results Display ---
 if st.session_state.get('processed', False):
     st.markdown("---")
     st.header("Results")
-    col1, col2 = st.columns(2)
+    tab1, tab2 = st.tabs(["📊 Motility Metrics","🔍 Detection & Tracking"])
+    
+    with tab1:
+        st.subheader("Motility Classification")
+        if st.session_state.get('annotated_video'):
+            st.video(st.session_state.annotated_video)
+        st.download_button("Download Motility Classification Video", st.session_state.annotated_video, "motility_classified_video.mp4", mime="video/mp4")
+        st.download_button("Download Kinematic Metrics CSV", st.session_state.metrics_csv, "kinematic_metrics.csv", mime="text/csv") 
 
-    # Left: Detection/Tracking
-    with col1:
+    with tab2:
         st.subheader("Object Detection & Tracking")
         if st.session_state.video_bytes:
             st.video(st.session_state.video_bytes)
-        st.download_button(
-            label="Download Annotated Video",
-            data=st.session_state.video_bytes,
-            file_name="annotated_video.mp4",
-            mime="video/mp4"
-        )
-        st.download_button(
-            label="Download Tracking Data (CSV)",
-            data=st.session_state.csv_bytes,
-            file_name="tracked_coordinates.csv",
-            mime="text/csv"
-        )
+        st.download_button("Download Annotated Video", st.session_state.video_bytes, "annotated_video.mp4", mime="video/mp4")
+        st.download_button("Download Tracking Data (CSV)", st.session_state.csv_bytes, "tracked_coordinates.csv", mime="text/csv")
 
-    # Right: Motility Classification
-    with col2:
-        st.subheader("Motility Classification & Kinematic Metrics")
-        if st.session_state.get('annotated_video'):
-            st.video(st.session_state.annotated_video)
-        st.download_button(
-            label="Download Motility Classification Video",
-            data=st.session_state.annotated_video,
-            file_name="motility_classified_video.mp4",
-            mime="video/mp4"
-        )
-        st.download_button(
-            label="Download Kinematic Metrics CSV",
-            data=st.session_state.metrics_csv,
-            file_name="kinematic_metrics.csv",
-            mime="text/csv"
-        )
-
-    # Option to process a new video
     if st.button("Process New Video"):
         for key in [
             'processed', 'output_video_path', 'csv_output_path', 'frames_written',
