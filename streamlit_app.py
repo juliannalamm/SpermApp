@@ -106,39 +106,23 @@ def process_video(video_path, model, tracker, progress_bar, frame_info):
 # --- Video Selection ---
 demo_dir = "demo_videos"
 demo_videos = [f for f in os.listdir(demo_dir) if f.endswith((".mp4", ".avi", ".mov", ".mkv"))]
-demo_videos.insert(0, "None (upload your own)")
 
-st.subheader("Select a demo video or upload your own:")
+st.subheader("Select a demo video:")
 demo_choice = st.selectbox("Demo video:", demo_videos)
-uploaded_file = st.file_uploader("Or upload a video", type=["mp4", "avi", "mov", "mkv"])
 
 video_path = None
-if demo_choice != "None (upload your own)":
-    video_path = os.path.join(demo_dir, demo_choice)
-elif uploaded_file is not None:
-    tfile = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
-    tfile.write(uploaded_file.read())
-    video_path = tfile.name
+
+video_path = os.path.join(demo_dir, demo_choice)
+
 
 # --- Advanced Metadata ---
-use_defaults = (demo_choice != "None (upload your own)")
-if not use_defaults:
-    with st.expander("Advanced Settings (custom upload only)"):
-        st.subheader("Enter Metadata for Uploaded Video")
-        image_j_scale = st.number_input(
-            "Pixels per micron", 
-            value=0.48, 
-            min_value=0.01,
-            help="Using ImageJ: 1) Open your video in ImageJ 2) Use the 'Set Scale' tool (Analyze > Set Scale) 3) Draw a line over a known distance (e.g., 100 microns) 4) Enter the known distance and units 5) Use the resulting scale (pixels/unit). Alternative: Measure pixels manually and divide by known distance."
-        )
-        total_duration_seconds = st.number_input("Total video duration (sec)", value=30.0, min_value=0.1)
-        img_w = st.number_input("Image width (px)", value=640)
-        img_h = st.number_input("Image height (px)", value=480)
-else:
-    image_j_scale = 0.48
-    total_duration_seconds = 30
-    img_w = 640
-    img_h = 480
+
+
+
+image_j_scale = 0.48
+total_duration_seconds = 30
+img_w = 640
+img_h = 480
 
 # --- Processing Trigger ---
 start = st.button("Start Processing")
