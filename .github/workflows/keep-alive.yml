@@ -1,0 +1,32 @@
+name: Keep Streamlit App Alive
+
+on:
+  schedule:
+    # Run every 6 hours to keep app active
+    - cron: '0 */6 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  keep-alive:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Ping Streamlit App
+      run: |
+        # Your Streamlit app URL
+        APP_URL="https://spermtrack.streamlit.app/"
+        echo "Pinging Streamlit app at: $APP_URL"
+        
+        # Try to ping the app
+        response=$(curl -s -o /dev/null -w "%{http_code}" "$APP_URL" || echo "000")
+        
+        if [ "$response" = "200" ]; then
+          echo "✅ Successfully pinged app (HTTP $response)"
+        else
+          echo "⚠️ App responded with HTTP $response (might be sleeping)"
+        fi
+      
+    - name: Log Activity
+      run: |
+        echo "Keep-alive ping completed at $(date)"
+        echo "This prevents the Streamlit app from going to sleep"
+        echo "Next ping will be in 6 hours" 
