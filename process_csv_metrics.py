@@ -188,6 +188,7 @@ def process_csv_metrics(tracked_csv_path=None, tracked_csv_bytes=None, original_
     
     # Calculate frames to process (2 seconds worth)
     frames_to_process = min(fps * 2, total_frames)
+    print(f"Processing motility classification video: {frames_to_process} frames ({frames_to_process/fps:.1f} seconds) at {fps} fps")
     
     video_output_path = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4').name
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
@@ -221,6 +222,7 @@ def process_csv_metrics(tracked_csv_path=None, tracked_csv_bytes=None, original_
     # Check if we have any valid tracks to process
     if len(metrics_df) == 0:
         print("No valid tracks found for video processing. Creating empty video.")
+        print(f"Creating empty video: {frames_to_process} frames ({frames_to_process/fps:.1f} seconds) at {fps} fps")
         # Create a simple video with just the original frames
         video_output_path = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4').name
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
@@ -236,6 +238,7 @@ def process_csv_metrics(tracked_csv_path=None, tracked_csv_bytes=None, original_
         
         cap.release()
         out.release()
+        print(f"Empty video created: {frame_idx} frames processed")
         
         # Re-encode to browser-safe format
         fixed_output_temp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
@@ -300,6 +303,7 @@ def process_csv_metrics(tracked_csv_path=None, tracked_csv_bytes=None, original_
 
     cap.release()
     out.release()
+    print(f"Motility classification video created: {frame_idx} frames processed")
 
     # Re-encode to browser-safe format (H.264 in MP4 container)
     fixed_output_temp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")

@@ -151,7 +151,7 @@ if start and video_path:
         st.session_state.csv_bytes = csv_bytes
         st.session_state.frames_written = frames_written
 
-    with st.spinner("Classifying motility, just a few more moments..."):
+    with st.spinner("Classifying motility patterns, just a few more moments..."):
         try:
             annotated_video, metrics_csv = process_csv_metrics(
                 tracked_csv_bytes=st.session_state.csv_bytes,
