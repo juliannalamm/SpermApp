@@ -41,12 +41,15 @@ if 'processed' not in st.session_state:
     st.session_state.csv_bytes = None
 
 # --- Video Processing Function ---
-def process_video(video_path, model, tracker, progress_bar, frame_info):
+def process_video(video_path, model, tracker, progress_bar, frame_info, max_seconds=2):
     cap = cv2.VideoCapture(video_path)
     frame_width = int(cap.get(3))
     frame_height = int(cap.get(4))
     fps = int(cap.get(cv2.CAP_PROP_FPS))
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    
+    # Calculate frames to process (2 seconds worth)
+    frames_to_process = min(fps * max_seconds, total_frames)
     frame_count = 0
 
     output_video_temp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
@@ -60,7 +63,7 @@ def process_video(video_path, model, tracker, progress_bar, frame_info):
     csv_writer.writerow(['frame', 'id', 'x1', 'y1', 'x2', 'y2', 'confidence', 'class'])
 
     frames_written = 0
-    while cap.isOpened():
+    while cap.isOpened() and frame_count < frames_to_process:
         success, frame = cap.read()
         if not success:
             break
@@ -79,9 +82,10 @@ def process_video(video_path, model, tracker, progress_bar, frame_info):
         out.write(annotated_frame)
         frames_written += 1
         frame_count += 1
-        progress_bar.progress(min(frame_count / total_frames, 1.0))
-        frame_info.text(f"Processing frame {frame_count}/{total_frames}")
+        progress_bar.progress(min(frame_count / frames_to_process, 1.0))
+        frame_info.text(f"Processing frame {frame_count}/{frames_to_process}")
 
+    # Close video writer after processing 2 seconds
     cap.release()
     out.release()
     csv_file.close()
@@ -120,7 +124,7 @@ video_path = os.path.join(demo_dir, demo_choice)
 
 
 image_j_scale = 0.48
-total_duration_seconds = 30
+total_duration_seconds = 2  # Analyze only 2 seconds
 img_w = 640
 img_h = 480
 
@@ -148,16 +152,23 @@ if start and video_path:
         st.session_state.frames_written = frames_written
 
     with st.spinner("Classifying motility, just a few more moments..."):
-        annotated_video, metrics_csv = process_csv_metrics(
-            tracked_csv_bytes=st.session_state.csv_bytes,
-            original_video_path=video_path,
-            image_j_scale=image_j_scale,
-            total_duration_seconds=total_duration_seconds,
-            img_w=img_w,
-            img_h=img_h
-        )
-        st.session_state.annotated_video = annotated_video
-        st.session_state.metrics_csv = metrics_csv
+        try:
+            annotated_video, metrics_csv = process_csv_metrics(
+                tracked_csv_bytes=st.session_state.csv_bytes,
+                original_video_path=video_path,
+                image_j_scale=image_j_scale,
+                total_duration_seconds=total_duration_seconds,
+                img_w=img_w,
+                img_h=img_h
+            )
+            st.session_state.annotated_video = annotated_video
+            st.session_state.metrics_csv = metrics_csv
+        except Exception as e:
+            st.error(f"Error during motility classification: {str(e)}")
+            st.warning("No sperm were detected or processed. Please try with a different video.")
+            # Set empty results to prevent further errors
+            st.session_state.annotated_video = b""
+            st.session_state.metrics_csv = b""
 
     st.success(f"Processing complete! {st.session_state.frames_written} frames processed.")
 
@@ -169,24 +180,40 @@ if st.session_state.get('processed', False):
     
     with tab1:
         st.subheader("Motility Classification")
-        if st.session_state.get('annotated_video'):
+        if st.session_state.get('annotated_video') and len(st.session_state.annotated_video) > 0:
             st.video(st.session_state.annotated_video)
+        else:
+            st.warning("No motility classification results available. This may indicate no sperm were detected or processed.")
         
         col1, col2 = st.columns(2)
         with col1:
-            st.download_button("Download Motility Classification Video", st.session_state.annotated_video, "motility_classified_video.mp4", mime="video/mp4")
+            if st.session_state.get('annotated_video') and len(st.session_state.annotated_video) > 0:
+                st.download_button("Download Motility Classification Video", st.session_state.annotated_video, "motility_classified_video.mp4", mime="video/mp4")
+            else:
+                st.download_button("Download Motility Classification Video", b"", "motility_classified_video.mp4", mime="video/mp4", disabled=True)
         with col2:
-            st.download_button("Download Kinematic Metrics CSV", st.session_state.metrics_csv, "kinematic_metrics.csv", mime="text/csv")
+            if st.session_state.get('metrics_csv') and len(st.session_state.metrics_csv) > 0:
+                st.download_button("Download Kinematic Metrics CSV", st.session_state.metrics_csv, "kinematic_metrics.csv", mime="text/csv")
+            else:
+                st.download_button("Download Kinematic Metrics CSV", b"", "kinematic_metrics.csv", mime="text/csv", disabled=True)
 
     with tab2:
         st.subheader("Object Detection & Tracking")
-        if st.session_state.video_bytes:
+        if st.session_state.video_bytes and len(st.session_state.video_bytes) > 0:
             st.video(st.session_state.video_bytes)
+        else:
+            st.warning("No detection and tracking results available.")
         col1, col2 = st.columns(2)
         with col1: 
-            st.download_button("Download Annotated Video", st.session_state.video_bytes, "annotated_video.mp4", mime="video/mp4")
+            if st.session_state.video_bytes and len(st.session_state.video_bytes) > 0:
+                st.download_button("Download Annotated Video", st.session_state.video_bytes, "annotated_video.mp4", mime="video/mp4")
+            else:
+                st.download_button("Download Annotated Video", b"", "annotated_video.mp4", mime="video/mp4", disabled=True)
         with col2:
-            st.download_button("Download Tracking Data (CSV)", st.session_state.csv_bytes, "tracked_coordinates.csv", mime="text/csv")
+            if st.session_state.csv_bytes and len(st.session_state.csv_bytes) > 0:
+                st.download_button("Download Tracking Data (CSV)", st.session_state.csv_bytes, "tracked_coordinates.csv", mime="text/csv")
+            else:
+                st.download_button("Download Tracking Data (CSV)", b"", "tracked_coordinates.csv", mime="text/csv", disabled=True)
 
     if st.button("Process New Video"):
         for key in [

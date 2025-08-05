@@ -148,7 +148,30 @@ def process_csv_metrics(tracked_csv_path=None, tracked_csv_bytes=None, original_
     metrics_df['STR'] = (metrics_df['VSL'] / metrics_df['VAP']) * 100
     metrics_df.replace([np.inf, -np.inf], 0, inplace=True)
     metrics_df.fillna(0, inplace=True)
-    metrics_df = metrics_df[metrics_df['total_displacement'] >= 20]
+    
+    # Debug: Check metrics before filtering
+    print(f"Metrics before filtering: {len(metrics_df)} samples")
+    print(f"Total displacement range: {metrics_df['total_displacement'].min()} to {metrics_df['total_displacement'].max()}")
+    
+    # Use a more lenient filter or skip filtering if no samples meet criteria
+    if len(metrics_df) > 0:
+        min_displacement = metrics_df['total_displacement'].min()
+        if min_displacement < 20:
+            # Use a lower threshold or no threshold
+            threshold = max(1, min_displacement * 0.5)  # Use 50% of minimum displacement
+            metrics_df = metrics_df[metrics_df['total_displacement'] >= threshold]
+            print(f"Applied threshold: {threshold}, samples after filtering: {len(metrics_df)}")
+        else:
+            metrics_df = metrics_df[metrics_df['total_displacement'] >= 20]
+            print(f"Applied threshold: 20, samples after filtering: {len(metrics_df)}")
+    else:
+        print("No samples in metrics_df before filtering")
+
+    # Check if we have any samples after filtering
+    if len(metrics_df) == 0:
+        print("No samples remain after filtering. Returning empty results.")
+        # Return empty results instead of crashing
+        return b"", b""
 
     scaler = joblib.load("models/minmax_scaler.pkl")
     model = joblib.load("models/subcluster_model.pkl")
@@ -161,6 +184,11 @@ def process_csv_metrics(tracked_csv_path=None, tracked_csv_bytes=None, original_
 
     cap = cv2.VideoCapture(original_video_path)
     fps = int(cap.get(cv2.CAP_PROP_FPS))
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    
+    # Calculate frames to process (2 seconds worth)
+    frames_to_process = min(fps * 2, total_frames)
+    
     video_output_path = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4').name
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     out = cv2.VideoWriter(video_output_path, fourcc, fps, (img_w, img_h))
@@ -189,8 +217,51 @@ def process_csv_metrics(tracked_csv_path=None, tracked_csv_bytes=None, original_
     frame_dict = {f: [] for f in df['frame_number'].unique()}
     for _, row in df.iterrows():
         frame_dict[row['frame_number']].append(row)
+    
+    # Check if we have any valid tracks to process
+    if len(metrics_df) == 0:
+        print("No valid tracks found for video processing. Creating empty video.")
+        # Create a simple video with just the original frames
+        video_output_path = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4').name
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out = cv2.VideoWriter(video_output_path, fourcc, fps, (img_w, img_h))
+        
+        frame_idx = 0
+        while cap.isOpened() and frame_idx < frames_to_process:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            out.write(frame)
+            frame_idx += 1
+        
+        cap.release()
+        out.release()
+        
+        # Re-encode to browser-safe format
+        fixed_output_temp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+        fixed_output_path = fixed_output_temp.name
+        subprocess.run([
+            "ffmpeg", "-y", "-i", video_output_path,
+            "-vcodec", "libx264", "-acodec", "aac", fixed_output_path
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        
+        metrics_output_path = tempfile.NamedTemporaryFile(delete=False, suffix="_metrics.csv").name
+        # Create empty metrics CSV
+        empty_metrics_df = pd.DataFrame(columns=['id', 'total_displacement', 'VSL', 'total_distance', 'VCL', 'VAP', 'ALH Mean', 'ALH Max', 'LIN', 'WOB', 'STR', 'Cluster', 'Motility Class'])
+        empty_metrics_df.to_csv(metrics_output_path, index=False)
+        
+        with open(fixed_output_path, "rb") as f:
+            annotated_video_bytes = f.read()
+        with open(metrics_output_path, "rb") as f:
+            metrics_csv_bytes = f.read()
+        
+        os.remove(video_output_path)
+        os.remove(fixed_output_path)
+        os.remove(metrics_output_path)
+        
+        return annotated_video_bytes, metrics_csv_bytes
     frame_idx = 0
-    while cap.isOpened():
+    while cap.isOpened() and frame_idx < frames_to_process:
         ret, frame = cap.read()
         if not ret:
             break
