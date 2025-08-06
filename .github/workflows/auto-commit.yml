@@ -1,0 +1,41 @@
+name: Auto-Commit to Keep App Awake
+
+on:
+  schedule:
+    # Run every 4 hours to keep app active
+    - cron: '0 */4 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  auto-commit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Configure Git
+      run: |
+        git config --global user.name 'github-actions[bot]'
+        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+    
+    - name: Create timestamp file
+      run: |
+        echo "Last keep-alive ping: $(date)" > keep_alive_timestamp.txt
+        echo "This file is automatically updated to keep the Streamlit app awake."
+        echo "Timestamp: $(date -u)" >> keep_alive_timestamp.txt
+    
+    - name: Commit and push changes
+      run: |
+        git add keep_alive_timestamp.txt
+        git commit -m "🤖 Auto-commit: Keep Streamlit app awake - $(date -u)"
+        git push origin main
+    
+    - name: Log Activity
+      run: |
+        echo "✅ Auto-commit completed at $(date -u)"
+        echo "This triggers a redeployment and keeps the Streamlit app awake"
+        echo "Next auto-commit will be in 4 hours" 
