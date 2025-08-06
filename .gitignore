@@ -14,10 +14,6 @@ venv/
 .ipynb_checkpoints
 
 # Models
-models/
-best.pt
-minmax_scaler.pkl
-subcluster_model.pkl
 
 # Videos
 demo_videos/
