@@ -1,32 +1,41 @@
-name: Keep Streamlit App Alive
+name: Auto-Commit to Keep App Awake
 
 on:
   schedule:
-    # Run every 6 hours to keep app active
-    - cron: '0 */6 * * *'
+    # Run every 4 hours to keep app active
+    - cron: '0 */4 * * *'
   workflow_dispatch: # Allow manual trigger
 
 jobs:
-  keep-alive:
+  auto-commit:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-    - name: Ping Streamlit App
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Configure Git
       run: |
-        # Your Streamlit app URL
-        APP_URL="https://spermtrack.streamlit.app/"
-        echo "Pinging Streamlit app at: $APP_URL"
-        
-        # Try to ping the app
-        response=$(curl -s -o /dev/null -w "%{http_code}" "$APP_URL" || echo "000")
-        
-        if [ "$response" = "200" ]; then
-          echo "✅ Successfully pinged app (HTTP $response)"
-        else
-          echo "⚠️ App responded with HTTP $response (might be sleeping)"
-        fi
-      
+        git config --global user.name 'github-actions[bot]'
+        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+    
+    - name: Create timestamp file
+      run: |
+        echo "Last keep-alive ping: $(date)" > keep_alive_timestamp.txt
+        echo "This file is automatically updated to keep the Streamlit app awake."
+        echo "Timestamp: $(date -u)" >> keep_alive_timestamp.txt
+    
+    - name: Commit and push changes
+      run: |
+        git add keep_alive_timestamp.txt
+        git commit -m "🤖 Auto-commit: Keep Streamlit app awake - $(date -u)"
+        git push origin main
+    
     - name: Log Activity
       run: |
-        echo "Keep-alive ping completed at $(date)"
-        echo "This prevents the Streamlit app from going to sleep"
-        echo "Next ping will be in 6 hours" 
+        echo "✅ Auto-commit completed at $(date -u)"
+        echo "This triggers a redeployment and keeps the Streamlit app awake"
+        echo "Next auto-commit will be in 4 hours" 
